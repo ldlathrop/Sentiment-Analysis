@@ -1,3 +1,29 @@
+library(qdap)
+library(RWeka)
+library(wordcloud)
+library(rJava)
+library(openNLP)
+library(topicmodels)
+library(SnowballC)
+library(quanteda)
+library(wordnet)
+library(tidyr)
+library(gridExtra)
+library(slam)
+library(RTextTools)
+library(Hmisc)
+library(reshape)
+library(gplots)
+library(lattice)
+library(plotrix)
+library(GGally)
+library(RWeka)
+library(Matrix)
+library(qlcMatrix)
+library(svs)
+library(Rstem)
+library(sentiment)
+
 ##################################################
 # SECTION: SENTIMENT ANALYSIS - DICTIONARY-BASED
 ##################################################
@@ -170,6 +196,14 @@ for (i in 1:nrow(sent)) {
 }
 
 View(tmp)
+
+# Now create subset based on tweets with certain words, such as the high frequency words identified in the text mining. eg. science
+clPeople <- subset(clinton.scores, regexpr("people", clinton.scores$text) > 0)   # extract tweets containing only 'scien'
+# plot histogram for this token, 
+ggplot(clPeople, aes(x = score)) + geom_histogram(binwidth = 1) + xlab("Sentiment score for the token 'scien'") + ylab("Frequency") + theme_bw()  + element_text(axis.title.x = theme_text(vjust = -0.5, size = 14)) + element_text(axis.title.y = theme_text(size = 14, angle = 90, vjust = -0.25))
+# repeat this block with different high frequency words
+
+
 
 ##########################################################
 # SECTION: SENTIMENT ANALYSIS - SYNTACTIC METHOD
@@ -446,4 +480,34 @@ index[k] = i
 
 
 cl.index
+
+##################################################
+# SECTION: SENTIMENT ANALYSIS - SENTIMENT PACKAGE
+##################################################
+
+cl.matrix <- create_matrix(clinton.sent, language="english", removeNumbers=TRUE, 
+                        stemWords=FALSE, weighting=weightTfIdf)
+
+# CLASSIFY EMOTIONS
+classify_emotion(clinton.sent, algorithm="bayes", 
+                 prior=0.1, verbose=FALSE)
+
+classify_emotion(sanders.sent, algorithm="bayes", 
+                 prior=0.5, verbose=FALSE)
+
+classify_emotion(trump.sent, algorithm="voter", 
+                 verbose=FALSE)
+
+# CLASSIFY POLARITY
+classify_polarity(clinton.sent,algorithm="bayes",
+                  pstrong = 0.5, pweak = 1.0,
+                  prior = 1.0, verbose=FALSE)
+
+classify_polarity(sanders.sent,algorithm="bayes",
+                  pstrong = 0.5, pweak = 1.0,
+                  prior = 1.0, verbose=FALSE)
+
+classify_polarity(trump.sent,algorithm="bayes",
+                  pstrong = 0.5, pweak = 1.0,
+                  prior = 1.0, verbose=FALSE)
 

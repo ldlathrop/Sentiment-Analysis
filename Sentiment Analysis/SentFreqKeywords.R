@@ -1,3 +1,28 @@
+library(qdap)
+library(RWeka)
+library(wordcloud)
+library(rJava)
+library(openNLP)
+library(topicmodels)
+library(SnowballC)
+library(quanteda)
+library(wordnet)
+library(tidyr)
+library(gridExtra)
+library(slam)
+library(RTextTools)
+library(Hmisc)
+library(reshape)
+library(gplots)
+library(lattice)
+library(plotrix)
+library(GGally)
+library(RWeka)
+library(Matrix)
+library(qlcMatrix)
+library(svs)
+library(Rstem)
+library(sentiment)
 
 #################################################
 # SECTION: MOST FREQUENT WORDS
@@ -46,38 +71,4 @@ formattable(allTop, list(
 
 
 
-#################################################
-# FIND KEYWORDS BASED ON TOPICS
-##################################################
-
-clinton.tm <- convert(clinton.dfm, to="tm")
-sanders.tm <- convert(sanders.dfm, to="tm")
-trump.tm <- convert(trump.dfm, to="tm")
-
-# Word associations
-require(RKEA)
-require(RKEAjars)
-cl.strong.keywords <- list(c("peace", "sanctions", "secure", "values"),
-                    c("work", "defend", "problems", "fighting"),
-                    c("working", "results", "problems", "country"),
-                    c("justice", "white", "opportunity", "action"))
-                    
-
-cl.latent.keywords <- list(c("shared", "commitment", "relationship", "deter"),
-                           c("women", "dignity", "muslims", "job"),
-                           c("rights", "progress", "immigrants", "violence"),
-                           c("justice", "white", "opportunity", "action"))
-
-tmpdir <- tempfile()
-dir.create(tmpdir)
-cl.model <- file.path(tmpdir, "clStrongModel")
-createModel(clinton.sent, cl.strong.keywords, cl.model)
-
-
-# N-gram analysis
-NgramTokenizer <- function(x) NGramTokenizer(x, Weka_control(min = 2, max = 4))
-cl.ngram <- DocumentTermMatrix(clinton.tm$dimnames$Terms, control = list(tokenize = NgramTokenizer))
-# little bit of regex to remove bigrams with stopwords in them, cf. http://stackoverflow.com/a/6947724/1036500
-stpwrds <- paste(stopwords("en"), collapse = "|")
-x$dimnames$Terms[!grepl(stpwrds, x$dimnames$Terms)]
 

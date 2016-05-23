@@ -1,18 +1,40 @@
+library(tm)
+library(qdap)
+library(RWeka)
+library(wordcloud)
+library(rJava)
+library(openNLP)
+library(topicmodels)
+library(SnowballC)
+library(quanteda)
+library(wordnet)
+library(tidyr)
+library(gridExtra)
+library(slam)
+library(RTextTools)
+library(Hmisc)
+library(reshape)
+library(gplots)
+library(lattice)
+library(plotrix)
+library(GGally)
+library(RWeka)
+library(Matrix)
+library(qlcMatrix)
+library(svs)
+library(Rstem)
+library(sentiment)
+
 #############################################
 # SECTION: TOPIC MODELING
 #############################################
 
-# Convert dfms for use with 'tm' package
-clinton.tm <- convert(clinton.dfm, to="tm")
-sanders.tm <- convert(sanders.dfm, to="tm")
-trump.tm <- convert(trump.dfm, to="tm")
+# Read in files for use with `tm` package
 
+cl.txt <- system.file("./Clinton/", "*.txt", package = "tm")
+cl.corp <- VCorpus(DirSource(cl.txt, encoding = "UTF-8"), 
+                             readerControl = list(language = "english"))
 
-# Now create subset based on tweets with certain words, such as the high frequency words identified in the text mining. eg. science
-clPeople <- subset(clinton.scores, regexpr("people", clinton.scores$text) > 0)   # extract tweets containing only 'scien'
-# plot histogram for this token, 
-ggplot(clPeople, aes(x = score)) + geom_histogram(binwidth = 1) + xlab("Sentiment score for the token 'scien'") + ylab("Frequency") + theme_bw()  + element_text(axis.title.x = theme_text(vjust = -0.5, size = 14)) + element_text(axis.title.y = theme_text(size = 14, angle = 90, vjust = -0.25))
-# repeat this block with different high frequency words
 
 cl.tm.sparse <- removeSparseTerms(clinton.tm, sparse=0.95)  # I found I had to iterate over this to ensure the tdm doesn't get too small... for example: 0.990 nrow=88, 0.989, nrow=67, 0.985, nrow=37, 0.98 nrow=23, 0.95 nrow=6
 cl.tdm.sp.df <- as.data.frame(inspect(cl.tm.sparse)) # convert document term matrix to data frame
@@ -52,14 +74,6 @@ ggplot(cl.best.model.logLik.df, aes(x = topics, y = LL)) +
   opts(axis.title.y=theme_text(size = 14, angle=90, vjust= -0.25)) + 
   opts(plot.margin = unit(c(1,1,2,2), "lines"))  
 
-# ggsave(file = "model_LL_per_topic_number.pdf") # export the plot to a PDF file
-# it's not easy to see exactly which topic number has the highest LL, so let's look at the data...
-cl.best.model.logLik.df.sort <- cl.best.model.logLik.df[order(-cl.best.model.logLik.df$LL), ] # sort to find out which number of topics has the highest loglik, in this case 23 topics. 
-cl.best.model.logLik.df.sort # have a look to see what's at the top of the list, the one with the highest score
-ntop <- cl.best.model.logLik.df.sort[1,]$topics
-
-
-lda <- LDA(a.tdm.sp.t.tdif, ntop) # generate a LDA model the optimum number of topics
 get_terms(lda, 5) # get keywords for each topic, just for a quick look
 get_topics(lda, 5) # gets topic numbers per document
 lda_topics<-get_topics(lda, 5) 
@@ -82,7 +96,7 @@ cl.tm.sparse.st <- wordStem(cl.tm.sparse$dimnames$Terms, language = character(),
 sa.tm.sparse.st <- wordStem(sa.tm.sparse$dimnames$Terms, language = character(), warnTested = FALSE)
 tr.tm.sparse.st <- wordStem(tr.tm.sparse$dimnames$Terms, language = character(), warnTested = FALSE)
 
-cl.tm.sparse.t <- t(cl.tm.sparse) # transpose document term matrix, necessary for the next steps using mean term frequency-inverse document frequency (tf-idf) to select the vocabulary for topic modeling
+cl.tm.sparse.t <- t(cl.tm.sparse.st) # transpose document term matrix, necessary for the next steps using mean term frequency-inverse document frequency (tf-idf) to select the vocabulary for topic modeling
 summary(col_sums(cl.tm.sparse.t)) # check median...
 cl_tfidf <- tapply(cl.tm.sparse.t$v/row_sums(cl.tm.sparse.t)[cl.tm.sparse.t$i], cl.tm.sparse.t$j,mean) * log2(nDocs(cl.tm.sparse.t)/col_sums(cl.tm.sparse.t>0)) # calculate tf-idf values
 summary(cl_tfidf) # check median... note value for next line... 
@@ -96,7 +110,7 @@ summary(col_sums(cl.tdm.sp.t.tdif)) # have a look
 ##################################################
 # SECTION: ANOTHER APPROACH TO TOPIC MODELING
 ###################################################
-
+require(slam)
 # Convert dfms for use with topicmodels package
 clinton.topic <- convert(clinton.dfm, to="topicmodels")
 sanders.topic <- convert(sanders.dfm, to="topicmodels")
@@ -162,6 +176,7 @@ names(clTopicTerms)
 clTopicTerms <- gather(clTopicTerms, Words, Frequency, wall:wealthy)
 saTop <- arrange(saTop, Words)
 write.csv(saTop, file="satop.csv")
+
 
 # SANDERS TOPIC MODEL
 k=9
@@ -245,3 +260,48 @@ colnames(tr.beta) <- tr.terms # puts the terms (or words) as the column names fo
 tr.id <- t(apply(tr.beta, 1, order)) # order the beta values
 tr.beta_ranked <- lapply(1:nrow(tr.id),function(i)tr.beta[i,tr.id[i,]])  # gives table of words per topic with words ranked in order of beta values. Useful for determining the most important words per topic
 head(tr.beta_ranked, 10)
+
+# CORRELATED TOPIC MODEL (CTM)
+control_CTM_VEM <-
+      list(estimate.beta = TRUE,
+                     verbose = 0, prefix = tempfile(), save = 0, keep = 0,
+                     seed = as.integer(Sys.time()), nstart = 1L, best = TRUE,
+                     var = list(iter.max = 500, tol = 10^-6),
+                     em = list(iter.max = 1000, tol = 10^-4),
+                     initialize = "random",
+                     cg = list(iter.max = 500, tol = 10^-5))
+
+#################################################
+# FIND KEYWORDS BASED ON TOPICS
+##################################################
+
+clinton.tm <- convert(clinton.dfm, to="tm")
+sanders.tm <- convert(sanders.dfm, to="tm")
+trump.tm <- convert(trump.dfm, to="tm")
+
+# Word associations
+require(RKEA)
+require(RKEAjars)
+cl.strong.keywords <- list(c("peace", "sanctions", "secure", "values"),
+                           c("work", "defend", "problems", "fighting"),
+                           c("working", "results", "problems", "country"),
+                           c("justice", "white", "opportunity", "action"))
+
+
+cl.latent.keywords <- list(c("shared", "commitment", "relationship", "deter"),
+                           c("women", "dignity", "muslims", "job"),
+                           c("rights", "progress", "immigrants", "violence"),
+                           c("justice", "white", "opportunity", "action"))
+
+tmpdir <- tempfile()
+dir.create(tmpdir)
+cl.model <- file.path(tmpdir, "clStrongModel")
+createModel(clinton.sent, cl.strong.keywords, cl.model)
+
+
+# N-gram analysis
+NgramTokenizer <- function(x) NGramTokenizer(x, Weka_control(min = 2, max = 4))
+cl.ngram <- TermDocumentMatrix(clinton.sent, control = list(tokenize = NgramTokenizer))
+# little bit of regex to remove bigrams with stopwords in them, cf. http://stackoverflow.com/a/6947724/1036500
+stpwrds <- paste(stopwords("en"), collapse = "|")
+x$dimnames$Terms[!grepl(stpwrds, x$dimnames$Terms)]

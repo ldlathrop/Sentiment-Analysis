@@ -32,7 +32,8 @@ library(RWeka)
 library(Matrix)
 library(qlcMatrix)
 library(svs)
-
+library(Rstem)
+library(sentiment)
 
 require(devtools)
 install_url("http://cran.r-project.org/src/contrib/Archive/Rstem/Rstem_0.4-1/tar/gz")
