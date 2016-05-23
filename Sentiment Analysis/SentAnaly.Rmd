@@ -1,0 +1,282 @@
+---
+title: "Outline"
+author: "L Lathrop"
+output: html_document
+always_allow_html: yes
+---
+<html>
+<head>
+<style>
+h1 {text-align:center;}
+h2 {text-align:center;}
+h3 {text-align:center;}
+h3 {text-align:center;}
+</style>
+</head>
+</html>
+```{r global_options, include=FALSE}
+knitr::opts_chunk$set(include=FALSE, warning=FALSE, message=FALSE)
+```  
+```{r echo=FALSE}
+library(tm)
+library(RColorBrewer)
+library(broom)
+library(formattable)
+library(ggplot2)
+library(ggthemes)
+library(ggvis)
+library(kernlab)
+library(plotly)
+library(plyr)
+library(dplyr)
+library(qdap)
+library(RWeka)
+library(wordcloud)
+library(rJava)
+library(openNLP)
+library(topicmodels)
+library(SnowballC)
+library(quanteda)
+library(wordnet)
+library(tidyr)
+
+# Read in the files and create corpus for each candidate.
+clintonCorpus <- textfile("Clinton/*.txt", docvarsfrom = "filenames", docvarnames = c("Candidate", "Month", "Day", "Year"))
+clinton <- corpus(texts(clintonCorpus))
+clinton.words <- tokenize(toLower(clinton), what = "word", removePunct = TRUE)
+clinton.sent <- tokenize(toLower(clinton), what = "sentence")
+
+sandersCorpus <- textfile("Sanders/*.txt", docvarsfrom = "filenames", docvarnames = c("Candidate", "Month", "Day", "Year"), cache = FALSE)
+sanders <- corpus(texts(sandersCorpus))
+sanders.words <- tokenize(toLower(sanders), what="word", removePunct = TRUE)
+sanders.sent <- tokenize(toLower(sanders), what="sentence")
+
+trumpCorpus <- textfile("Trump/*.txt", docvarsfrom = "filenames", docvarnames = c("Candidate", "Month", "Day", "Year"), cache = FALSE)
+trump <- corpus(texts(trumpCorpus))
+trump.words <- tokenize(toLower(trump), what="word", removePunct = TRUE)
+trump.sent <- tokenize(toLower(trump), what="sentence")
+
+myDict <- scan(file = "stopwords.txt", what="character", sep = ",", strip.white=TRUE)
+
+clinton.dfm <- dfm(clinton.words, ignoredFeatures = c(stopwords("english"), myDict, "steve", "senator", "thank"))
+
+sanders.dfm <- dfm(sanders.words, ignoredFeatures = c(stopwords("english"), myDict))
+
+trump.dfm <- dfm(trump.words, ignoredFeatures = c(stopwords("english"), myDict))
+```
+
+<h1>Sentiment analysis of presidential <br> campaign speeches using R</h1>
+  
+<h2>Data sources</h2>
+This data project makes use of three speeches each for the remaining three candidates, as follows: 
+  
+#### Democratic candidates  
+**Hillary Clinton**  
+- Speech transcript at AIPAC Policy Conference (03/21/16)  
+- Remarks at Suffolk County Democratic Committee’s Annual Spring Dinner (04/12/16)  
+- Remarks at Primary Rally in Philadelphia (04/26/16) 
+  
+**Bernie Sanders**  
+- Remarks on Wall Street and the Economy in New York City (01/05/16)   
+- Remarks at the New Hampshire Democratic Party Jefferson-Jackson Dinner in Manchester (11/29/15)   
+- Remarks on Democratic Socialism in the United States (11/19/15)   
+
+#### Republican candidate  
+**Donald Trump**  
+- Speech at AIPAC Policy Conference (03/21/16)  
+- Foreign policy speech (04/27/16)  
+- Remarks Announcing Candidacy for President in New York City (06/16/15)  
+  
+  
+<h2>Introduction</h2>
+1. Brief introduction to text mining, sentiment analysis, and topic modeling. *(Sources: Chen, et al, Exploiting domain knowledge in aspect extraction; Liu, Sentiment analysis and opinion mining; Liu, Sentiment analysis and subjectivity.)*  
+2. Introduction to this analysis of political speech and why it is both relevant and important.  
+  
+<h2>Section 1:  Basic text analysis</h2>
+1. Description of speeches being used.
+2. Basic description of text processing.
+3. Most common words used by each candidate as shown in wordclouds (N.B. These wordclouds are VERY rudimentary (i.e., terrible colors, not proportionally representative) and generic, both in terms of colors and the style of the clouds. In other words, the final graphics will look very different. I'm planning to use visualization of the kind seen [here](http://www.chrisharrison.net/index.php/Visualizations/WordAssociations).)  
+4. Brief analysis of results.  
+  
+```{r echo=FALSE, include=TRUE}
+pal <- brewer.pal(8, "Set1")
+par(mfrow=c(1,3), mar=c(4,4,2,1), oma=c(0,0,1,0))
+plot(clinton.dfm, max.words = 30, colors = pal, bty="o", scale = c(6, .3),
+     title="Hillary Clinton's Speeches")
+plot(sanders.dfm, max.words = 30, colors = pal, bty="o", scale = c(6, .3),
+     title="Bernie Sanders' Speeches")
+plot(trump.dfm, max.words = 30, colors = pal, bty="o", scale = c(6, .3),
+     title="Donald Trump's Speeches")
+
+```  
+```{r echo=FALSE, include=FALSE}
+# Create a most common words named vector for each candidate
+clTop <- topfeatures(clinton.dfm, 100)
+saTop <- topfeatures(sanders.dfm, 100)
+trTop <- topfeatures(trump.dfm, 100)
+
+# Turn most common words named vector into a dataset for each candidate
+# Then combine all datasets into one
+clTop <- data.frame(as.list(clTop))
+clTop <- gather(clTop, Clinton.Words, Clinton.Frequency, people:states)
+clTop$Clinton.Words <- as.factor(clTop$Clinton.Words)
+
+saTop <- data.frame(as.list(saTop))
+saTop <- gather(saTop, Sanders.Words, Sanders.Frequency, wall:economy)
+saTop$Sanders.Words <- as.factor(saTop$Sanders.Words)
+
+trTop <- data.frame(as.list(trTop))
+trTop <- gather(trTop, Trump.Words, Trump.Frequency, people:united)
+trTop$Trump.Words <- as.factor(trTop$Trump.Words)
+
+# Bind the datasets together
+allTop <- cbind(clTop, saTop, trTop)
+
+# Create graphic table using the 'formattable' package
+a <- format_table(allTop, formatters=list(
+  Clinton.Frequency = color_bar("slateblue", 0.1),
+  Sanders.Frequency = color_bar("mediumslateblue", 0.1),
+  Trump.Frequency = color_bar("red", 0.1),
+  format="markdown",
+  align="l"
+))
+a
+```  
+```{r echo=FALSE}
+hu.liu.pos = scan('opinion-lexicon-English/positive.txt', what = 'character',comment.char=';') #load +ve sentiment word list
+hu.liu.neg = scan('opinion-lexicon-English/negative.txt',what = 'character',comment.char= ';') #load -ve sentiment word list
+pos.words = c(hu.liu.pos)
+neg.words = c(hu.liu.neg)
+
+score.sentiment = function(sentences, pos.words, neg.words, .progress='none')
+{
+  require(plyr)
+  require(stringr)
+  
+  # we got a vector of sentences. plyr will handle a list
+  # or a vector as an "l" for us
+  # we want a simple array ("a") of scores back, so we use
+  # "l" + "a" + "ply" = "laply":
+  scores = laply(sentences, function(sentence, pos.words, neg.words) {
+    
+    # clean up sentences with R's regex-driven global substitute, gsub():
+    sentence = gsub('[[:punct:]]', '', sentence)
+    sentence = gsub('[[:cntrl:]]', '', sentence)
+    sentence = gsub('\\d+', '', sentence)
+    # and convert to lower case:
+    sentence = tolower(sentence)
+    
+    # split into words. str_split is in the stringr package
+    word.list = str_split(sentence, '\\s+')
+    # sometimes a list() is one level of hierarchy too much
+    words = unlist(word.list)
+    
+    # compare our words to the dictionaries of positive & negative terms
+    pos.matches = match(words, pos.words)
+    neg.matches = match(words, neg.words)
+    
+    # match() returns the position of the matched term or NA
+    # we just want a TRUE/FALSE:
+    pos.matches = !is.na(pos.matches)
+    neg.matches = !is.na(neg.matches)
+    
+    # and conveniently enough, TRUE/FALSE will be treated as 1/0 by sum():
+    score = sum(pos.matches) - sum(neg.matches)
+    
+    return(score)
+  }, pos.words, neg.words, .progress=.progress )
+  
+  scores.df = data.frame(score=scores, text=sentences)
+  return(scores.df)
+}
+require(plyr)
+clinton.list <- as.list(c(clinton.sent$Clinton_03_21_16.txt, clinton.sent$Clinton_04_12_16.txt, clinton.sent$Clinton_04_26_16.txt))
+sanders.list <- as.list(c(sanders.sent$Sanders_10_24_15.txt, sanders.sent$Sanders_11_19_15.txt, sanders.sent$Sanders_01_05_16.txt))
+trump.list <- as.list(c(trump.sent$Trump_06_16_15.txt, trump.sent$Trump_03_21_16.txt, trump.sent$Trump_04_27_16.txt))
+
+# get scores for the texts 
+clinton.scores <- score.sentiment(clinton.list,pos.words,neg.words,.progress='text') 
+
+sanders.scores <- score.sentiment(sanders.list,pos.words,neg.words,.progress='text')
+
+trump.scores <- score.sentiment(trump.list,pos.words,neg.words,.progress='text')
+
+options(digits = 2)
+scoreFun <- function(x){
+  tbl <- data.frame(table(x))
+  colnames(tbl) <- c("Score", "Count")
+  tbl$Percentage <- tbl$Count / sum(tbl$Count) * 100
+  round(tbl$Percentage, 2)
+  return(tbl)
+}
+```  
+```{r echo=FALSE}
+clPct <- scoreFun(clinton.scores$score)
+clPct$hovertext <- paste("Percentage of total",
+                        round(clPct$Percentage,2), sep = "<br>")
+
+saPct <- scoreFun(sanders.scores$score)
+saPct$hovertext <- paste("Percentage of total",
+                         round(saPct$Percentage,2), sep = "<br>")
+
+trPct <- scoreFun(trump.scores$score)
+trPct$hovertext <- paste("Percentage of total",
+                         round(trPct$Percentage,2), sep = "<br>")
+```  
+```{r echo=FALSE}
+clPct$Score <- as.numeric(levels(clPct$Score)[clPct$Score])
+cl.pos <- subset(clPct, clPct$Score >= 2) # get tweets with only very +ve scores
+cl.neg <- subset(clPct, clPct$Score <= -2) # get tweets with only very -ve scores
+
+saPct$Score <- as.numeric(levels(saPct$Score)[saPct$Score])
+sa.pos <- subset(saPct, saPct$Score >= 2) # get tweets with only very +ve scores
+sa.neg <- subset(saPct, saPct$Score <= -2) # get tweets with only very -ve scores
+
+trPct$Score <- as.numeric(levels(trPct$Score)[trPct$Score])
+tr.pos <- subset(trPct, trPct$Score >= 2) # get tweets with only very +ve scores
+tr.neg <- subset(trPct, trPct$Score <= -2) # get tweets with only very -ve scores
+```  
+    
+<h2>Section 2:  Sentiment analysis</h2>
+1. Description of processing.  
+2. Sentence-based sentiment analysis by comparing individual statements against the `pros and cons dataset` used in (Ganapathibhotla and Liu, Coling-2008 & Liu, Hu and Cheng, WWW-2005) for determining context (aspect) dependent sentiment words, which are then applied to sentiment analysis of comparative sentiences. Below are preliminary visualizations for this analysis.    
+3. Analysis of results including percentages of highly positive and highly negative scores for each candidate. For example, Hillary Clinton's sentiments scores reveal that `r round(sum(cl.pos$Percentage), 2)`% of her statements are highly positive and `r round(sum(cl.neg$Percentage), 2)`% are highly negative.  
+  
+<h3>Percentage totals for negative and <br> positive statements for each candidate</h3>
+
+```{r echo=FALSE, include=TRUE}
+# Define xaxis and yaxis
+d <- subplot(
+  plot_ly(clPct, x = Score, y=Percentage, xaxis="x1", yaxis="y1",
+          text = hovertext, hoverinfo = 'text', mode = "line"),
+  plot_ly(saPct, x = Score, y=Percentage, xaxis="x2", yaxis="y2",
+          text = hovertext, hoverinfo = 'text', mode = "line"),
+  plot_ly(trPct, x = Score, y=Percentage, xaxis="x3", yaxis="y3",
+          text = hovertext, hoverinfo = 'text', mode = "line"),
+  margin = 0.05,
+  nrows=3
+) %>% layout(d, 
+            xaxis=list(title="", range=c(-15, 15)),
+             xaxis2=list(title="", range=c(-15,15)),
+            xaxis3=list(title="Score", range=c(-15,15)),
+             yaxis=list(title="Clinton", range=c(0,50)),
+             yaxis2=list(title="Sanders", range=c(0,50)),
+            yaxis3=list(title="Trump", range=c(0,50)),
+            showlegend = FALSE)
+d
+```  
+  
+  
+<h2>Section 3:  Topic models using Latent Dirichlet Allocation (LDA)</h2>  
+1. Brief description of topic modeling, how it works, and why it is used
+2. Brief description of processing used, e.g., log-liklihood  
+3. I'm not certain about the visualization I will use here, but it will likely be some sort of network or cluster visualization showing the links between topics, such as [this one](http://www.chrisharrison.net/index.php/Visualizations/ClusterBall)  
+  
+  
+<h2>Concluding summary</h2>
+  
+1. Brief recap of tools used for analysis
+2. Brief statement of what the resulting analysis reflects regarding each candidate
+  
+  
+  
